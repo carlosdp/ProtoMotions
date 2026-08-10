@@ -77,6 +77,7 @@ class SmoothnessCalculator:
         data = rigid_body_pos_metric.data  # [num_motions, max_frames, num_bodies*3]
         frame_counts = rigid_body_pos_metric.frame_counts  # [num_motions]
         num_motions = data.shape[0]
+        storage_device = data.device
 
         # Calculate window size in frames (minimum 4 for jerk computation)
         window_frames = max(4, int(round(window_sec / self.dt)))
@@ -84,9 +85,9 @@ class SmoothnessCalculator:
         # Reshape to [num_motions, max_frames, num_bodies, 3]
         pos = data.view(num_motions, -1, num_bodies, 3)
 
-        per_motion_nj = torch.zeros(num_motions, device=self.device)
+        per_motion_nj = torch.zeros(num_motions, device=storage_device)
         per_body_per_motion_nj = torch.zeros(
-            num_motions, num_bodies, device=self.device
+            num_motions, num_bodies, device=storage_device
         )
         windowed_nj_per_motion = []
 
@@ -97,7 +98,7 @@ class SmoothnessCalculator:
             ):  # Need at least window_frames for computation
                 # Add empty tensor for motions with insufficient data
                 windowed_nj_per_motion.append(
-                    torch.empty(0, num_bodies, device=self.device)
+                    torch.empty(0, num_bodies, device=storage_device)
                 )
                 continue
 
@@ -165,7 +166,7 @@ class SmoothnessCalculator:
         num_windows = T - window_frames + 1
 
         if num_windows <= 0 or window_frames < 4:
-            return torch.empty(0, num_bodies, device=self.device)
+            return torch.empty(0, num_bodies, device=pos_motion.device)
 
         # Create sliding windows using unfold: [num_windows, window_frames, num_bodies, 3]
         # We need to permute to get the right dimensions for unfold
@@ -343,7 +344,9 @@ class SmoothnessCalculator:
 if __name__ == "__main__":
     import torch
     import math
-    from protomotions.agents.evaluators.smoothness_calculator import SmoothnessCalculator
+    from protomotions.agents.evaluators.smoothness_calculator import (
+        SmoothnessCalculator,
+    )
     from protomotions.agents.evaluators.metrics import MotionMetrics
 
     device = torch.device("cpu")

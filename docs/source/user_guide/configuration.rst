@@ -284,6 +284,33 @@ The ``in_keys``/``out_keys`` system connects observations to network inputs,
 and connects different network layers/modules. 
 TensorDict is used to handle the data flow, which also make ONNX export easier.
 
+Mimic Evaluation at Corpus Scale
+--------------------------------
+
+``MimicEvaluator`` stores collected trajectories on CPU so periodic evaluation can
+run beside the model, optimizer, and rollout buffers without retaining the full
+motion corpus on the training GPU. For large training libraries, cap each periodic
+evaluation with ``eval_max_motions``:
+
+.. code-block:: python
+
+   evaluator=MimicEvaluatorConfig(
+       eval_metrics_every=200,
+       eval_max_motions=4096,
+       save_predicted_motion_lib_every=None,
+       evaluation_components={...},
+   )
+
+The cap samples motions uniformly without replacement on each evaluation. Only
+evaluated motions participate in success/failure reporting and motion-weight
+updates. Leave ``eval_max_motions=None`` to evaluate every motion.
+
+Full-library evaluation and predicted-motion-library export can require substantial
+CPU memory and time on corpus-scale datasets. Prefer running those offline or
+post-hoc rather than beside training. Predicted-library export is skipped when
+``eval_max_motions`` selects only part of the library because the result would be
+incomplete.
+
 Debugging Tips
 --------------
 

@@ -242,7 +242,9 @@ class BaseEvaluator:
             evaluated = self._eval_mask
             num_eval_items = evaluated.sum().item()
             if num_eval_items > 0:
-                success_rate = 1.0 - self._motion_failed[evaluated].float().mean().item()
+                success_rate = (
+                    1.0 - self._motion_failed[evaluated].float().mean().item()
+                )
             else:
                 success_rate = 1.0
             to_log["eval/success_rate"] = success_rate
@@ -252,7 +254,12 @@ class BaseEvaluator:
                 threshold = component.static_params.get("threshold", None)
                 if threshold is not None:
                     if num_eval_items > 0:
-                        failure_rate = self._per_component_failures[name][evaluated].float().mean().item()
+                        failure_rate = (
+                            self._per_component_failures[name][evaluated]
+                            .float()
+                            .mean()
+                            .item()
+                        )
                     else:
                         failure_rate = 0.0
                     to_log[f"eval/{name}/failure_rate"] = failure_rate
@@ -317,33 +324,39 @@ class BaseEvaluator:
         self.env.robot_config.reset_noise = self._saved_reset_noise
         self.env.simulator._push_enabled = self._saved_push_enabled
 
-    def _init_eval_component_buffers(self, num_eval_ids: int) -> None:
+    def _init_eval_component_buffers(
+        self, num_eval_ids: int, device: Optional[torch.device] = None
+    ) -> None:
         """Initialize per-component failure and value accumulators for this evaluation run."""
         if not self.config.evaluation_components:
             return
 
+        storage_device = device or self.device
+
         self._motion_failed = torch.zeros(
-            num_eval_ids, dtype=torch.bool, device=self.device
+            num_eval_ids, dtype=torch.bool, device=storage_device
         )
-        self._eval_mask = torch.zeros(num_eval_ids, dtype=torch.bool, device=self.device)
+        self._eval_mask = torch.zeros(
+            num_eval_ids, dtype=torch.bool, device=storage_device
+        )
         self._per_component_failures = {
-            name: torch.zeros(num_eval_ids, dtype=torch.bool, device=self.device)
+            name: torch.zeros(num_eval_ids, dtype=torch.bool, device=storage_device)
             for name in self.config.evaluation_components.keys()
         }
         self._component_value_sum = {
-            name: torch.zeros(num_eval_ids, device=self.device)
+            name: torch.zeros(num_eval_ids, device=storage_device)
             for name in self.config.evaluation_components.keys()
         }
         self._component_value_min = {
-            name: torch.full((num_eval_ids,), float("inf"), device=self.device)
+            name: torch.full((num_eval_ids,), float("inf"), device=storage_device)
             for name in self.config.evaluation_components.keys()
         }
         self._component_value_max = {
-            name: torch.full((num_eval_ids,), float("-inf"), device=self.device)
+            name: torch.full((num_eval_ids,), float("-inf"), device=storage_device)
             for name in self.config.evaluation_components.keys()
         }
         self._component_step_count = {
-            name: torch.zeros(num_eval_ids, dtype=torch.long, device=self.device)
+            name: torch.zeros(num_eval_ids, dtype=torch.long, device=storage_device)
             for name in self.config.evaluation_components.keys()
         }
 
@@ -369,28 +382,30 @@ class BaseEvaluator:
         )
 
         # Vectorized update of motion failures
-        active_failed = failed_buf[active_env_ids]
-        self._motion_failed[active_motion_ids] = (
-            self._motion_failed[active_motion_ids] | active_failed
+        storage_device = self._motion_failed.device
+        storage_motion_ids = active_motion_ids.to(device=storage_device)
+        active_failed = failed_buf[active_env_ids].to(device=storage_device)
+        self._motion_failed[storage_motion_ids] = (
+            self._motion_failed[storage_motion_ids] | active_failed
         )
-        self._eval_mask[active_motion_ids] = True
+        self._eval_mask[storage_motion_ids] = True
 
         for name, failures in component_failures.items():
-            active_failures = failures[active_env_ids]
-            self._per_component_failures[name][active_motion_ids] = (
-                self._per_component_failures[name][active_motion_ids] | active_failures
+            active_failures = failures[active_env_ids].to(device=storage_device)
+            self._per_component_failures[name][storage_motion_ids] = (
+                self._per_component_failures[name][storage_motion_ids] | active_failures
             )
 
         for name, values in component_values.items():
-            active_vals = values[active_env_ids]
-            self._component_value_sum[name][active_motion_ids] += active_vals
-            self._component_value_min[name][active_motion_ids] = torch.minimum(
-                self._component_value_min[name][active_motion_ids], active_vals
+            active_vals = values[active_env_ids].to(device=storage_device)
+            self._component_value_sum[name][storage_motion_ids] += active_vals
+            self._component_value_min[name][storage_motion_ids] = torch.minimum(
+                self._component_value_min[name][storage_motion_ids], active_vals
             )
-            self._component_value_max[name][active_motion_ids] = torch.maximum(
-                self._component_value_max[name][active_motion_ids], active_vals
+            self._component_value_max[name][storage_motion_ids] = torch.maximum(
+                self._component_value_max[name][storage_motion_ids], active_vals
             )
-            self._component_step_count[name][active_motion_ids] += 1
+            self._component_step_count[name][storage_motion_ids] += 1
 
     def _create_base_metrics(
         self,
@@ -424,6 +439,7 @@ class BaseEvaluator:
         num_motions: int,
         motion_num_frames: torch.Tensor,
         max_eval_steps: int,
+        device: Optional[torch.device] = None,
     ) -> None:
         """
         Add metrics for raw robot state (dof_pos, rigid_body_pos, etc.).
@@ -434,6 +450,7 @@ class BaseEvaluator:
             num_motions: Number of motions to evaluate
             motion_num_frames: Number of frames per motion
             max_eval_steps: Maximum evaluation steps
+            device: Device used for trajectory storage. Defaults to the evaluator device.
         """
         # Default implementation for humanoid robot state
         if not hasattr(self.env, "simulator"):
@@ -451,7 +468,7 @@ class BaseEvaluator:
                     motion_num_frames,
                     max_eval_steps,
                     num_sub_features=shape[0],
-                    device=self.device,
+                    device=device or self.device,
                 )
         except (AttributeError, KeyError, IndexError) as e:
             log.warning("Could not add robot state metrics: %s", e)

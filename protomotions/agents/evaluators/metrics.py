@@ -36,20 +36,24 @@ class MotionMetrics:
         """
         self.num_motions = num_motions
         self.num_sub_features = num_sub_features
-        self.device = device
+        self.device = (
+            torch.device(device) if device is not None else torch.device("cpu")
+        )
         self.dtype = dtype
-        self.motion_lens = motion_lens
+        self.motion_lens = motion_lens.to(device=self.device)
         self.max_motion_len = max_motion_len
 
         # Raw data storage
         self.data = torch.zeros(
             (num_motions, self.max_motion_len, num_sub_features),
-            device=device,
+            device=self.device,
             dtype=dtype,
         )
 
         # Counters to track number of frames per motion
-        self.frame_counts = torch.zeros(num_motions, device=device, dtype=torch.long)
+        self.frame_counts = torch.zeros(
+            num_motions, device=self.device, dtype=torch.long
+        )
 
     def update(
         self,
@@ -66,6 +70,11 @@ class MotionMetrics:
             frame_indices: Optional tensor of frame indices [batch_size]
                            If None, will use the current count for each motion
         """
+        motion_ids = motion_ids.to(device=self.device)
+        values = values.to(device=self.device)
+        if frame_indices is not None:
+            frame_indices = frame_indices.to(device=self.device)
+
         if values.ndim == 1:
             values = values.unsqueeze(1)
         assert motion_ids.shape[0] == values.shape[0]

@@ -3,7 +3,7 @@
 
 """Configuration classes for evaluators."""
 
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Optional, Union
 from dataclasses import dataclass, field
 
 from protomotions.envs.mdp_component import MdpComponent
@@ -16,15 +16,20 @@ class EvaluatorConfig:
     _target_: str = "protomotions.agents.evaluators.base_evaluator.BaseEvaluator"
     evaluation_components: Dict[str, MdpComponent] = field(
         default_factory=dict,
-        metadata={"help": "Dictionary of MdpComponent evaluation metrics for success/failure tracking."}
+        metadata={
+            "help": "Dictionary of MdpComponent evaluation metrics for success/failure tracking."
+        },
     )
     max_eval_steps: int = field(
         default=600,
-        metadata={"help": "Maximum steps per evaluation episode.", "min": 1}
+        metadata={"help": "Maximum steps per evaluation episode.", "min": 1},
     )
     eval_metrics_every: Optional[int] = field(
         default=200,
-        metadata={"help": "Evaluate metrics every N epochs. None = disabled.", "min": 1}
+        metadata={
+            "help": "Evaluate metrics every N epochs. None = disabled.",
+            "min": 1,
+        },
     )
 
 
@@ -34,15 +39,25 @@ class MotionWeightsRulesConfig:
 
     motion_weights_update_success_discount: float = field(
         default=0.999,
-        metadata={"help": "Discount factor for successful motion weights.", "min": 0.0, "max": 1.0}
+        metadata={
+            "help": "Discount factor for successful motion weights.",
+            "min": 0.0,
+            "max": 1.0,
+        },
     )
     motion_weights_update_failure_discount: float = field(
         default=0.999,
-        metadata={"help": "Discount for failed motions. 0 = set weight straight to 1.", "min": 0.0, "max": 1.0}
+        metadata={
+            "help": "Discount for failed motions. 0 = set weight straight to 1.",
+            "min": 0.0,
+            "max": 1.0,
+        },
     )
     min_motion_weight: Union[float, str] = field(
         default="1/num_motions",
-        metadata={"help": "Minimum weight for any motion. '1/num_motions' or float value."}
+        metadata={
+            "help": "Minimum weight for any motion. '1/num_motions' or float value."
+        },
     )
 
 
@@ -53,11 +68,24 @@ class MimicEvaluatorConfig(EvaluatorConfig):
     _target_: str = "protomotions.agents.evaluators.mimic_evaluator.MimicEvaluator"
     save_predicted_motion_lib_every: Optional[int] = field(
         default=3,
-        metadata={"help": "Save pred_motion_lib every M evals. None = disabled.", "min": 1}
+        metadata={
+            "help": "Save pred_motion_lib every M evals. None = disabled.",
+            "min": 1,
+        },
+    )
+    eval_max_motions: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Uniformly sample at most this many motions per evaluation. "
+                "None evaluates the full motion library."
+            ),
+            "min": 1,
+        },
     )
     motion_weights_rules: MotionWeightsRulesConfig = field(
         default_factory=MotionWeightsRulesConfig,
-        metadata={"help": "Rules for updating motion sampling weights."}
+        metadata={"help": "Rules for updating motion sampling weights."},
     )
     eval_action_ema_alpha: Optional[float] = field(
         default=None,
@@ -71,5 +99,5 @@ class MimicEvaluatorConfig(EvaluatorConfig):
             ),
             "min": 0.0,
             "max": 1.0,
-        }
+        },
     )
