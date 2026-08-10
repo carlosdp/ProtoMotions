@@ -303,7 +303,9 @@ evaluation with ``eval_max_motions``:
 
 The cap samples motions uniformly without replacement on each evaluation. Only
 evaluated motions participate in success/failure reporting and motion-weight
-updates. Leave ``eval_max_motions=None`` to evaluate every motion.
+updates. Leave ``eval_max_motions=None`` to evaluate every motion. Post-hoc
+smoothness calculations move one motion at a time to the evaluator device, keeping
+their GPU workspace bounded while avoiding a corpus-scale CPU computation pass.
 
 Full-library evaluation and predicted-motion-library export can require substantial
 CPU memory and time on corpus-scale datasets. Prefer running those offline or

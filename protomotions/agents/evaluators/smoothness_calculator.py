@@ -78,6 +78,7 @@ class SmoothnessCalculator:
         frame_counts = rigid_body_pos_metric.frame_counts  # [num_motions]
         num_motions = data.shape[0]
         storage_device = data.device
+        compute_device = torch.device(self.device)
 
         # Calculate window size in frames (minimum 4 for jerk computation)
         window_frames = max(4, int(round(window_sec / self.dt)))
@@ -103,7 +104,10 @@ class SmoothnessCalculator:
                 continue
 
             # Extract valid frames for this motion: [T, num_bodies, 3]
-            pos_motion = pos[motion_idx, :valid_frames]
+            # Trajectories may be stored on CPU to keep corpus-scale state off the
+            # training GPU. Move only one motion at a time back to the compute
+            # device so post-hoc analysis stays fast with bounded GPU workspace.
+            pos_motion = pos[motion_idx, :valid_frames].to(device=compute_device)
 
             # Compute windowed normalized jerk efficiently using unfold
             window_nj = self._compute_windowed_normalized_jerk(
@@ -111,12 +115,15 @@ class SmoothnessCalculator:
             )
 
             # Store windowed NJ values for this motion
-            windowed_nj_per_motion.append(window_nj)
+            window_nj_storage = window_nj.to(device=storage_device)
+            windowed_nj_per_motion.append(window_nj_storage)
 
             # window_nj has shape [num_windows, num_bodies]
             # Take mean across windows to get per-body average
             if window_nj.numel() > 0:
-                per_body_per_motion_nj[motion_idx] = window_nj.mean(dim=0)
+                per_body_per_motion_nj[motion_idx] = window_nj.mean(dim=0).to(
+                    device=storage_device
+                )
                 per_motion_nj[motion_idx] = per_body_per_motion_nj[motion_idx].mean()
 
         return per_motion_nj, per_body_per_motion_nj, windowed_nj_per_motion

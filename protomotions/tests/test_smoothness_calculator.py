@@ -85,6 +85,40 @@ def test_compute_normalized_jerk_handles_valid_and_short_motions():
     assert windowed[1].shape == (0, 1)
 
 
+def test_compute_normalized_jerk_uses_bounded_compute_device_workspace(monkeypatch):
+    metrics = _cubic_position_metrics()
+    original_to = torch.Tensor.to
+    compute_device_requests = []
+
+    def record_to(tensor, *args, **kwargs):
+        requested_device = kwargs.get("device")
+        if (
+            requested_device is not None
+            and torch.device(requested_device).type == "cuda"
+        ):
+            compute_device_requests.append(tensor.shape)
+            return tensor
+        return original_to(tensor, *args, **kwargs)
+
+    monkeypatch.setattr(torch.Tensor, "to", record_to)
+    calculator = SmoothnessCalculator(
+        device=torch.device("cuda"),
+        dt=1.0,
+        window_sec=4.0,
+    )
+
+    per_motion, per_body, windowed = calculator.compute_normalized_jerk_from_pos(
+        metrics,
+        num_bodies=1,
+        window_sec=4.0,
+    )
+
+    assert compute_device_requests == [torch.Size([4, 1, 3])]
+    assert per_motion.device.type == "cpu"
+    assert per_body.device.type == "cpu"
+    assert all(values.device.type == "cpu" for values in windowed)
+
+
 def test_high_jerk_percentage_uses_default_or_explicit_threshold():
     calculator = SmoothnessCalculator(
         device=torch.device("cpu"),
@@ -97,10 +131,13 @@ def test_high_jerk_percentage_uses_default_or_explicit_threshold():
     assert calculator._compute_high_jerk_frame_percentage(windowed) == pytest.approx(
         100.0 * 2 / 3
     )
-    assert calculator._compute_high_jerk_frame_percentage(
-        windowed,
-        threshold=10.0,
-    ) == 0.0
+    assert (
+        calculator._compute_high_jerk_frame_percentage(
+            windowed,
+            threshold=10.0,
+        )
+        == 0.0
+    )
 
 
 def test_compute_smoothness_metrics_reports_valid_and_missing_inputs():

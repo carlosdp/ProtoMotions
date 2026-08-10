@@ -772,6 +772,11 @@ class BaseAgent:
                 # (number of motions evaluated), not num_envs. This ensures
                 # proper averaging when ranks evaluate different motion counts
                 # (e.g., co-training with heterogeneous motion libraries).
+                global_rank = getattr(self.fabric, "global_rank", 0)
+                print(
+                    f"Rank {global_rank}: aggregating evaluation metrics",
+                    flush=True,
+                )
                 eval_log_dict = aggregate_scalar_metrics(
                     eval_log_dict, self.fabric, weight=num_eval_items
                 )
@@ -782,6 +787,10 @@ class BaseAgent:
                         weight=num_eval_items,
                     )
                     evaluated_score = score_dict["_score"]
+                print(
+                    f"Rank {global_rank}: evaluation metric aggregation complete",
+                    flush=True,
+                )
 
                 if evaluated_score is not None:
                     if (

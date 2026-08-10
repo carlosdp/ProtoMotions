@@ -352,8 +352,16 @@ class MimicEvaluator(BaseEvaluator):
         to_log, success_rate, num_eval_items = super().process_eval_results()
         self._update_motion_sampling_weights()
 
+        print(
+            f"Rank {self.fabric.global_rank}: computing post-hoc evaluation metrics",
+            flush=True,
+        )
         additional_metrics = self._compute_additional_metrics(self._metrics)
         to_log.update(additional_metrics)
+        print(
+            f"Rank {self.fabric.global_rank}: post-hoc evaluation metrics complete",
+            flush=True,
+        )
 
         if self.fabric.global_rank == 0:
             if (
@@ -381,6 +389,10 @@ class MimicEvaluator(BaseEvaluator):
 
     def cleanup_after_evaluation(self) -> None:
         """Restore env and motion manager state after evaluation."""
+        print(
+            f"Rank {self.fabric.global_rank}: restoring training state after evaluation",
+            flush=True,
+        )
         self.motion_manager.motion_ids = self._cached_motion_ids
         self.motion_manager.motion_times = self._cached_motion_times
         self.env.restore_state(self._env_snapshot)
@@ -391,6 +403,10 @@ class MimicEvaluator(BaseEvaluator):
         del self._eval_motion_ids
         del self._fixed_eval_env_ids
         super().cleanup_after_evaluation()
+        print(
+            f"Rank {self.fabric.global_rank}: evaluation cleanup complete",
+            flush=True,
+        )
 
     def _plot_per_frame_metrics(
         self, metrics: Dict, actions_storage: list = None
